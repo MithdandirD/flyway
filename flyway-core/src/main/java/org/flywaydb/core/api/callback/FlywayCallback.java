@@ -1,5 +1,5 @@
-/**
- * Copyright 2010-2016 Boxfuse GmbH
+/*
+ * Copyright 2010-2017 Boxfuse GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import java.sql.Connection;
 
 /**
  * This is the main callback interface that should be implemented to get access to flyway lifecycle notifications.
- * Simply add code to the callback method you are interested in having. A convenience implementation will all methods
+ * Simply add code to the callback method you are interested in having. A convenience implementation with all methods
  * doing nothing is provided with {@link BaseFlywayCallback}. To ensure backward compatibility, you are encouraged
  * to subclass that class instead of implementing this interface directly.
  *
@@ -32,8 +32,6 @@ import java.sql.Connection;
  * already implements {@link ConfigurationAware}</p>
  *
  * <p>Each callback method will run within its own transaction.</p>
- * 
- * @author Dan Bunker
  */
 public interface FlywayCallback {
 	/**
@@ -63,6 +61,36 @@ public interface FlywayCallback {
 	 * @param connection A valid connection to the database.
 	 */
 	void afterMigrate(Connection connection);
+
+	/**
+	 * Runs before the undo task executes.
+	 *
+	 * @param connection A valid connection to the database.
+	 */
+	void beforeUndo(Connection connection);
+
+	/**
+	 * Runs before each migration script is undone.
+	 *
+	 * @param connection A valid connection to the database.
+	 * @param info The current MigrationInfo for the migration to be undone.
+	 */
+	void beforeEachUndo(Connection connection, MigrationInfo info);
+
+	/**
+	 * Runs after each migration script is undone.
+	 *
+	 * @param connection A valid connection to the database.
+	 * @param info The current MigrationInfo for the migration just undone.
+	 */
+	void afterEachUndo(Connection connection, MigrationInfo info);
+
+	/**
+	 * Runs after the undo task executes.
+	 *
+	 * @param connection A valid connection to the database.
+	 */
+	void afterUndo(Connection connection);
 
 	/**
 	 * Runs before each migration script is executed.

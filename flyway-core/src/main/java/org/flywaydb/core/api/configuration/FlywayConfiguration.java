@@ -1,5 +1,5 @@
-/**
- * Copyright 2010-2016 Boxfuse GmbH
+/*
+ * Copyright 2010-2017 Boxfuse GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@ package org.flywaydb.core.api.configuration;
 
 import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.callback.FlywayCallback;
+import org.flywaydb.core.api.errorhandler.ErrorHandler;
 import org.flywaydb.core.api.resolver.MigrationResolver;
 
 import javax.sql.DataSource;
+import java.io.OutputStream;
 import java.util.Map;
 
 /**
@@ -27,9 +29,9 @@ import java.util.Map;
  */
 public interface FlywayConfiguration {
     /**
-     * Retrieves the ClassLoader to use for resolving migrations on the classpath.
+     * Retrieves the ClassLoader to use for loading migrations, resolvers, etc from the classpath.
      *
-     * @return The ClassLoader to use for resolving migrations on the classpath.
+     * @return The ClassLoader to use for loading migrations, resolvers, etc from the classpath.
      * (default: Thread.currentThread().getContextClassLoader() )
      */
     ClassLoader getClassLoader();
@@ -85,19 +87,28 @@ public interface FlywayConfiguration {
     boolean isSkipDefaultCallbacks();
 
     /**
-     * Retrieves the file name suffix for sql migrations.
-     * <p/>
-     * <p>Sql migrations have the following file name structure: prefixVERSIONseparatorDESCRIPTIONsuffix ,
-     * which using the defaults translates to V1_1__My_description.sql</p>
+     * The file name prefix for versioned SQL migrations.
+     * <p>Versioned SQL migrations have the following file name structure: prefixVERSIONseparatorDESCRIPTIONsuffix ,
+     * which using the defaults translates to V1.1__My_description.sql</p>
      *
-     * @return The file name suffix for sql migrations. (default: .sql)
+     * @return The file name prefix for sql migrations. (default: V)
      */
-    String getSqlMigrationSuffix();
+    String getSqlMigrationPrefix();
 
     /**
-     * Retrieves the file name prefix for repeatable sql migrations.
-     * <p/>
-     * <p>Repeatable sql migrations have the following file name structure: prefixSeparatorDESCRIPTIONsuffix ,
+     * The file name prefix for undo SQL migrations.
+     * <p>Undo SQL migrations are responsible for undoing the effects of the versioned migration with the same version.</p>
+     * <p>They have the following file name structure: prefixVERSIONseparatorDESCRIPTIONsuffix ,
+     * which using the defaults translates to U1.1__My_description.sql</p>
+     * <p><i>Flyway Pro and Flyway Enterprise only</i></p>
+     *
+     * @return The file name prefix for undo sql migrations. (default: U)
+     */
+    String getUndoSqlMigrationPrefix();
+
+    /**
+     * Retrieves the file name prefix for repeatable SQL migrations.
+     * <p>Repeatable SQL migrations have the following file name structure: prefixSeparatorDESCRIPTIONsuffix ,
      * which using the defaults translates to R__My_description.sql</p>
      *
      * @return The file name prefix for repeatable sql migrations. (default: R)
@@ -106,7 +117,6 @@ public interface FlywayConfiguration {
 
     /**
      * Retrieves the file name separator for sql migrations.
-     * <p/>
      * <p>Sql migrations have the following file name structure: prefixVERSIONseparatorDESCRIPTIONsuffix ,
      * which using the defaults translates to V1_1__My_description.sql</p>
      *
@@ -115,14 +125,26 @@ public interface FlywayConfiguration {
     String getSqlMigrationSeparator();
 
     /**
-     * Retrieves the file name prefix for sql migrations.
-     * <p/>
+     * Retrieves the file name suffix for sql migrations.
      * <p>Sql migrations have the following file name structure: prefixVERSIONseparatorDESCRIPTIONsuffix ,
      * which using the defaults translates to V1_1__My_description.sql</p>
      *
-     * @return The file name prefix for sql migrations. (default: V)
+     * @return The file name suffix for sql migrations. (default: .sql)
+     * @deprecated Use {@link FlywayConfiguration#getSqlMigrationSuffixes()} instead. Will be removed in Flyway 6.0.0.
      */
-    String getSqlMigrationPrefix();
+    @Deprecated
+    String getSqlMigrationSuffix();
+
+    /**
+     * The file name suffixes for SQL migrations. (default: .sql)
+     * <p>SQL migrations have the following file name structure: prefixVERSIONseparatorDESCRIPTIONsuffix ,
+     * which using the defaults translates to V1_1__My_description.sql</p>
+     * <p>Multiple suffixes (like .sql,.pkg,.pkb) can be specified for easier compatibility with other tools such as
+     * editors with specific file associations.</p>
+     *
+     * @return The file name suffixes for SQL migrations.
+     */
+    String[] getSqlMigrationSuffixes();
 
     /**
      * Checks whether placeholders should be replaced.
@@ -162,12 +184,12 @@ public interface FlywayConfiguration {
     MigrationVersion getTarget();
 
     /**
-     * <p>Retrieves the name of the schema metadata table that will be used by Flyway.</p><p> By default (single-schema
-     * mode) the metadata table is placed in the default schema for the connection provided by the datasource. </p> <p>
-     * When the <i>flyway.schemas</i> property is set (multi-schema mode), the metadata table is placed in the first
+     * <p>Retrieves the name of the schema schema history table that will be used by Flyway.</p><p> By default (single-schema
+     * mode) the schema history table is placed in the default schema for the connection provided by the datasource. </p> <p>
+     * When the <i>flyway.schemas</i> property is set (multi-schema mode), the schema history table is placed in the first
      * schema of the list. </p>
      *
-     * @return The name of the schema metadata table that will be used by flyway. (default: schema_version)
+     * @return The name of the schema schema history table that will be used by flyway. (default: flyway_schema_history)
      */
     String getTable();
 
@@ -176,7 +198,7 @@ public interface FlywayConfiguration {
      * <p>Consequences:</p>
      * <ul>
      * <li>The first schema in the list will be automatically set as the default one during the migration.</li>
-     * <li>The first schema in the list will also be the one containing the metadata table.</li>
+     * <li>The first schema in the list will also be the one containing the schema history table.</li>
      * <li>The schemas will be cleaned in the order of this list.</li>
      * </ul>
      *
@@ -193,7 +215,6 @@ public interface FlywayConfiguration {
 
     /**
      * Retrieves the locations to scan recursively for migrations.
-     * <p/>
      * <p>The location type is determined by its prefix.
      * Unprefixed locations or locations starting with {@code classpath:} point to a package on the classpath and may
      * contain both sql and java-based migrations.
@@ -206,7 +227,7 @@ public interface FlywayConfiguration {
 
     /**
      * <p>
-     * Whether to automatically call baseline when migrate is executed against a non-empty schema with no metadata table.
+     * Whether to automatically call baseline when migrate is executed against a non-empty schema with no schema history table.
      * This schema will then be initialized with the {@code baselineVersion} before executing the migrations.
      * Only migrations above {@code baselineVersion} will then be applied.
      * </p>
@@ -232,9 +253,24 @@ public interface FlywayConfiguration {
     boolean isOutOfOrder();
 
     /**
-     * Ignore future migrations when reading the metadata table. These are migrations that were performed by a
+     * Ignore missing migrations when reading the schema history table. These are migrations that were performed by an
+     * older deployment of the application that are no longer available in this version. For example: we have migrations
+     * available on the classpath with versions 1.0 and 3.0. The schema history table indicates that a migration with version 2.0
+     * (unknown to us) has also been applied. Instead of bombing out (fail fast) with an exception, a
+     * warning is logged and Flyway continues normally. This is useful for situations where one must be able to deploy
+     * a newer version of the application even though it doesn't contain migrations included with an older one anymore.
+     * Note that if the most recently applied migration is removed, Flyway has no way to know it is missing and will
+     * mark it as future instead.
+     *
+     * @return {@code true} to continue normally and log a warning, {@code false} to fail fast with an exception.
+     * (default: {@code false})
+     */
+    boolean isIgnoreMissingMigrations();
+
+    /**
+     * Ignore future migrations when reading the schema history table. These are migrations that were performed by a
      * newer deployment of the application that are not yet available in this version. For example: we have migrations
-     * available on the classpath up to version 3.0. The metadata table indicates that a migration to version 4.0
+     * available on the classpath up to version 3.0. The schema history table indicates that a migration to version 4.0
      * (unknown to us) has already been applied. Instead of bombing out (fail fast) with an exception, a
      * warning is logged and Flyway continues normally. This is useful for situations where one must be able to redeploy
      * an older version of the application after the database has been migrated by a newer one.
@@ -267,7 +303,7 @@ public interface FlywayConfiguration {
      * Whether to disable clean.
      * <p>This is especially useful for production environments where running clean can be quite a career limiting move.</p>
      *
-     * @return {@code true} to disabled clean. {@code false} to leave it enabled.  (default: {@code false})
+     * @return {@code true} to disabled clean. {@code false} to leave it enabled. (default: {@code false})
      */
     boolean isCleanDisabled();
 
@@ -276,5 +312,39 @@ public interface FlywayConfiguration {
      *
      * @return {@code true} if mixed migrations should be allowed. {@code false} if an error should be thrown instead. (default: {@code false})
      */
-    boolean isAllowMixedMigrations();
+    boolean isMixed();
+
+    /**
+     * Whether to group all pending migrations together in the same transaction when applying them (only recommended for databases with support for DDL transactions).
+     *
+     * @return {@code true} if migrations should be grouped. {@code false} if they should be applied individually instead. (default: {@code false})
+     */
+    boolean isGroup();
+
+    /**
+     * The username that will be recorded in the schema history table as having applied the migration.
+     *
+     * @return The username or {@code null} for the current database user of the connection. (default: {@code null}).
+     */
+    String getInstalledBy();
+
+    /**
+     * Handlers for errors and warnings that occur during a migration. This can be used to customize Flyway's behavior by for example
+     * throwing another runtime exception, outputting a warning or suppressing the error instead of throwing a FlywayException.
+     * ErrorHandlers are invoked in order until one reports to have successfully handled the errors or warnings.
+     * If none do, or if none are present, Flyway falls back to its default handling of errors and warnings.
+     * <p><i>Flyway Pro and Flyway Enterprise only</i></p>
+     *
+     * @return The ErrorHandlers or an empty array if the default internal handler should be used instead. (default: none)
+     */
+    ErrorHandler[] getErrorHandlers();
+
+    /**
+     * The stream where to output the SQL statements of a migration dry run. {@code null} if the SQL statements
+     * are executed against the database directly.
+     * <p><i>Flyway Pro and Flyway Enterprise only</i></p>
+     *
+     * @return The stream or {@code null} if the SQL statements are executed against the database directly.
+     */
+    OutputStream getDryRunOutput();
 }

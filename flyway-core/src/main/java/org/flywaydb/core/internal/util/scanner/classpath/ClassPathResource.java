@@ -1,5 +1,5 @@
-/**
- * Copyright 2010-2016 Boxfuse GmbH
+/*
+ * Copyright 2010-2017 Boxfuse GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package org.flywaydb.core.internal.util.scanner.classpath;
 
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.internal.util.FileCopyUtils;
-import org.flywaydb.core.internal.util.scanner.Resource;
+import org.flywaydb.core.internal.util.scanner.LoadableResource;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,7 +32,7 @@ import java.nio.charset.Charset;
 /**
  * A resource on the classpath.
  */
-public class ClassPathResource implements Comparable<ClassPathResource>, Resource {
+public class ClassPathResource implements Comparable<ClassPathResource>, LoadableResource {
     /**
      * The location of the resource on the classpath.
      */

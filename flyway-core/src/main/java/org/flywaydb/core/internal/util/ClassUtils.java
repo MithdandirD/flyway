@@ -1,5 +1,5 @@
-/**
- * Copyright 2010-2016 Boxfuse GmbH
+/*
+ * Copyright 2010-2017 Boxfuse GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,17 @@
  */
 package org.flywaydb.core.internal.util;
 
-import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
-import org.flywaydb.core.internal.util.logging.Log;
-import org.flywaydb.core.internal.util.logging.LogFactory;
+import org.flywaydb.core.api.logging.Log;
+import org.flywaydb.core.api.logging.LogFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLDecoder;
+import java.security.CodeSource;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,12 +50,16 @@ public class ClassUtils {
      * @param classLoader The ClassLoader to use.
      * @param <T>         The type of the new instance.
      * @return The new instance.
-     * @throws Exception Thrown when the instantiation failed.
+     * @throws FlywayException Thrown when the instantiation failed.
      */
     @SuppressWarnings({"unchecked"})
     // Must be synchronized for the Maven Parallel Junit runner to work
-    public static synchronized <T> T instantiate(String className, ClassLoader classLoader) throws Exception {
-        return (T) Class.forName(className, true, classLoader).newInstance();
+    public static synchronized <T> T instantiate(String className, ClassLoader classLoader) {
+        try {
+            return (T) Class.forName(className, true, classLoader).getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            throw new FlywayException("Unable to instantiate class " + className + " : " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -68,14 +71,10 @@ public class ClassUtils {
      * @return The list of instances.
      */
     public static <T> List<T> instantiateAll(String[] classes, ClassLoader classLoader) {
-        List<T> clazzes = new ArrayList<T>();
+        List<T> clazzes = new ArrayList<>();
         for (String clazz : classes) {
             if (StringUtils.hasLength(clazz)) {
-                try {
-                    clazzes.add(ClassUtils.<T>instantiate(clazz, classLoader));
-                } catch (Exception e) {
-                    throw new FlywayException("Unable to instantiate class: " + clazz, e);
-                }
+                clazzes.add(ClassUtils.<T>instantiate(clazz, classLoader));
             }
         }
         return clazzes;
@@ -124,7 +123,12 @@ public class ClassUtils {
                 //Android
                 return null;
             }
-            String url = protectionDomain.getCodeSource().getLocation().getPath();
+            CodeSource codeSource = protectionDomain.getCodeSource();
+            if (codeSource == null) {
+                //Custom classloader with for example classes defined using URLClassLoader#defineClass(String name, byte[] b, int off, int len)
+                return null;
+            }
+            String url = codeSource.getLocation().getPath();
             return URLDecoder.decode(url, "UTF-8");
         } catch (UnsupportedEncodingException e) {
             //Can never happen.
@@ -135,18 +139,17 @@ public class ClassUtils {
     /**
      * Adds a jar or a directory with this name to the classpath.
      *
-     * @param name The name of the jar or directory to add.
+     * @param classLoader The current ClassLoader.
+     * @param name        The name of the jar or directory to add.
+     * @return The new ClassLoader containing the additional jar or directory.
      * @throws IOException when the jar or directory could not be found.
      */
-    public static void addJarOrDirectoryToClasspath(String name) throws IOException {
+    public static ClassLoader addJarOrDirectoryToClasspath(ClassLoader classLoader, String name) throws IOException {
         LOG.debug("Adding location to classpath: " + name);
 
         try {
             URL url = new File(name).toURI().toURL();
-            URLClassLoader sysloader = (URLClassLoader) ClassLoader.getSystemClassLoader();
-            Method method = URLClassLoader.class.getDeclaredMethod("addURL", URL.class);
-            method.setAccessible(true);
-            method.invoke(sysloader, url);
+            return new URLClassLoader(new URL[]{url}, classLoader);
         } catch (Exception e) {
             throw new FlywayException("Unable to load " + name, e);
         }

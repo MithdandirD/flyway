@@ -1,5 +1,5 @@
-/**
- * Copyright 2010-2016 Boxfuse GmbH
+/*
+ * Copyright 2010-2017 Boxfuse GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.flywaydb.core.internal.util.scanner.filesystem;
 import org.flywaydb.core.api.FlywayException;
 import org.flywaydb.core.internal.util.FileCopyUtils;
 import org.flywaydb.core.internal.util.StringUtils;
-import org.flywaydb.core.internal.util.scanner.Resource;
+import org.flywaydb.core.internal.util.scanner.LoadableResource;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -31,7 +31,7 @@ import java.nio.charset.Charset;
 /**
  * A resource on the filesystem.
  */
-public class FileSystemResource implements Resource, Comparable<FileSystemResource> {
+public class FileSystemResource implements LoadableResource, Comparable<FileSystemResource> {
     /**
      * The location of the resource on the filesystem.
      */
@@ -43,14 +43,14 @@ public class FileSystemResource implements Resource, Comparable<FileSystemResour
      * @param location The location of the resource on the filesystem.
      */
     public FileSystemResource(String location) {
-        this.location = new File(location);
+        this.location = new File(location.replace("\\", "/").replace("//", "/"));
     }
 
     /**
-     * @return The location of the resource on the classpath.
+     * @return The location of the resource on the filesystem.
      */
     public String getLocation() {
-        return StringUtils.replaceAll(location.getPath(), "\\", "/");
+        return location.getPath().replace("\\", "/");
     }
 
     /**
